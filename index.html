@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BIO1 &middot; Exoskeleton Assistive Control Bench</title>
+<meta name="description" content="Interactive teaching simulator for the BIO1 elbow-exoskeleton laboratory: position, admittance, EMG and combined assistive control, with a live arm/exo animation and instrument traces." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#0d1417;
+    --bg2:#0a0f12;
+    --panel:#131e22;
+    --panel2:#182a2f;
+    --line:#22383e;
+    --line2:#2e4c54;
+    --ink:#e2ecea;
+    --muted:#7d9791;
+    --faint:#5a726d;
+    /* signal palette (scope traces) */
+    --teal:#35e0c6;      /* measured joint angle  */
+    --amber:#f5b23f;     /* command / reference   */
+    --rose:#ff6d86;      /* interaction force     */
+    --lime:#a6e86a;      /* EMG                   */
+    --violet:#9b8cff;
+    --red:#ff5257;
+    --shadow:0 10px 40px rgba(0,0,0,.45);
+    --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+    --disp:'Space Grotesk',system-ui,-apple-system,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #12262a 0%, transparent 60%),
+      radial-gradient(900px 500px at -5% 110%, #10201c 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:var(--disp);
+    -webkit-font-smoothing:antialiased;
+    line-height:1.45;
+  }
+  a{color:var(--teal)}
+  .wrap{max-width:1500px;margin:0 auto;padding:20px 22px 60px}
+
+  /* ---------- header ---------- */
+  header.top{
+    display:flex;align-items:flex-end;justify-content:space-between;
+    gap:20px;flex-wrap:wrap;
+    border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:18px;
+  }
+  .brand{display:flex;align-items:center;gap:16px}
+  .badge{
+    font-family:var(--mono);font-weight:600;font-size:13px;letter-spacing:.14em;
+    color:var(--bg);background:var(--teal);
+    padding:8px 12px;border-radius:4px;
+    box-shadow:0 0 24px rgba(53,224,198,.35);
+  }
+  .brand h1{
+    font-size:22px;font-weight:600;margin:0;letter-spacing:-.01em;
+  }
+  .brand p{margin:2px 0 0;color:var(--muted);font-size:13px;font-family:var(--mono);letter-spacing:.02em}
+  .status{
+    font-family:var(--mono);font-size:12px;color:var(--muted);
+    display:flex;align-items:center;gap:10px;text-align:right;
+  }
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--red);box-shadow:0 0 10px var(--red)}
+  .dot.run{background:var(--teal);box-shadow:0 0 10px var(--teal);animation:pulse 1.4s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.4}}
+
+  /* ---------- task rail ---------- */
+  .tasks{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+  .task{
+    appearance:none;cursor:pointer;text-align:left;
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    color:var(--muted);padding:10px 14px;min-width:150px;
+    font-family:var(--disp);transition:.15s;
+  }
+  .task:hover{border-color:var(--line2);color:var(--ink)}
+  .task.active{
+    background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border-color:var(--teal);color:var(--ink);
+    box-shadow:inset 0 0 0 1px rgba(53,224,198,.25);
+  }
+  .task .k{font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--faint);display:block}
+  .task.active .k{color:var(--teal)}
+  .task .t{font-size:14px;font-weight:500}
+
+  /* ---------- layout ---------- */
+  .grid{display:grid;grid-template-columns:minmax(360px,1fr) minmax(420px,1.15fr);gap:16px}
+  @media (max-width:1040px){.grid{grid-template-columns:1fr}}
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    box-shadow:var(--shadow);overflow:hidden;
+  }
+  .card h2{
+    font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    font-family:var(--mono);font-weight:600;margin:0;
+    padding:12px 16px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+  }
+  .card h2 .side{color:var(--faint);letter-spacing:.06em}
+
+  /* stage */
+  #stageWrap{position:relative;background:
+      linear-gradient(180deg,#0c1418 0%, #0a1013 100%);}
+  canvas{display:block;width:100%}
+  #stage{height:360px}
+  #scope{height:560px}
+  @media (max-width:640px){#scope{height:460px}}
+  /* telemetry chips over stage */
+  .telem{
+    position:absolute;top:12px;left:12px;right:12px;
+    display:grid;grid-template-columns:repeat(3,1fr);gap:8px;pointer-events:none;
+  }
+  .chip{
+    background:rgba(9,15,17,.72);border:1px solid var(--line);border-radius:7px;
+    padding:7px 9px;backdrop-filter:blur(3px);
+  }
+  .chip .lab{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase}
+  .chip .val{font-family:var(--mono);font-size:17px;font-weight:600;color:var(--ink);white-space:nowrap}
+  .chip .val small{font-size:11px;color:var(--muted);font-weight:400}
+
+  /* controls */
+  .controls{padding:14px 16px}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .btn{
+    appearance:none;cursor:pointer;font-family:var(--mono);font-size:13px;font-weight:600;
+    letter-spacing:.03em;padding:9px 14px;border-radius:8px;border:1px solid var(--line2);
+    background:var(--panel2);color:var(--ink);transition:.15s;
+  }
+  .btn:hover{border-color:var(--teal);color:#fff}
+  .btn.primary{background:var(--teal);color:var(--bg);border-color:var(--teal)}
+  .btn.primary:hover{box-shadow:0 0 20px rgba(53,224,198,.4)}
+  .btn.warn{border-color:#4a2a2c;color:#ffb3bb}
+  .btn.warn:hover{border-color:var(--red)}
+  .btn.hold{user-select:none;-webkit-user-select:none;touch-action:none}
+  .btn.hold.on{background:var(--lime);color:#0a1a05;border-color:var(--lime);box-shadow:0 0 20px rgba(166,232,106,.4)}
+
+  .field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+  .field .lbl{
+    display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+    font-size:13px;color:var(--muted);
+  }
+  .field .lbl b{color:var(--ink);font-weight:500}
+  .field .lbl .num{font-family:var(--mono);color:var(--teal);font-size:13px}
+  .field .hint{font-size:11.5px;color:var(--faint);font-family:var(--mono)}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:3px;
+    background:linear-gradient(90deg,var(--line2),var(--line));outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+    background:var(--teal);border:2px solid var(--bg);cursor:pointer;
+    box-shadow:0 0 0 1px var(--teal),0 0 12px rgba(53,224,198,.5);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:16px;height:16px;border-radius:50%;background:var(--teal);
+    border:2px solid var(--bg);cursor:pointer;
+  }
+  input[type=range]:disabled{opacity:.35}
+  .toggle{display:flex;align-items:center;gap:9px;cursor:pointer;font-size:13px;color:var(--muted);margin-bottom:10px}
+  .toggle input{accent-color:var(--teal);width:16px;height:16px}
+  .toggle.on{color:var(--ink)}
+
+  .divider{height:1px;background:var(--line);margin:6px 0 14px}
+  .sub{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:2px 0 10px}
+
+  /* scope */
+  #scopeWrap{background:linear-gradient(180deg,#091012,#070c0e)}
+
+  /* explain + code */
+  .lower{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+  @media (max-width:1040px){.lower{grid-template-columns:1fr}}
+  .prose{padding:16px 18px;font-size:14px;color:#cdd9d6}
+  .prose h3{margin:0 0 8px;font-size:15px;font-weight:600;color:var(--ink)}
+  .prose p{margin:0 0 10px}
+  .prose ul{margin:0 0 10px;padding-left:18px}
+  .prose li{margin:4px 0}
+  .prose .q{
+    border-left:2px solid var(--amber);background:rgba(245,178,63,.06);
+    padding:8px 12px;margin:10px 0;border-radius:0 6px 6px 0;color:#e9d9b6;font-size:13.5px;
+  }
+  .prose .q b{color:var(--amber)}
+  .prose code{font-family:var(--mono);background:var(--bg2);border:1px solid var(--line);padding:1px 5px;border-radius:4px;font-size:12.5px;color:var(--teal)}
+  pre.code{
+    margin:0;padding:16px 18px;overflow:auto;background:var(--bg2);
+    font-family:var(--mono);font-size:12.5px;line-height:1.65;color:#c7d4d0;
+  }
+  pre.code .cm{color:var(--faint)}
+  pre.code .kw{color:var(--violet)}
+  pre.code .fn{color:var(--teal)}
+  pre.code .st{color:var(--amber)}
+  pre.code .nm{color:var(--rose)}
+  pre.code .hl{background:rgba(53,224,198,.10);display:block;margin:0 -18px;padding:0 18px}
+
+  footer{margin-top:26px;padding-top:16px;border-top:1px solid var(--line);
+    color:var(--faint);font-family:var(--mono);font-size:11.5px;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
+
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:14px;height:3px;border-radius:2px;display:inline-block}
+
+  @media (prefers-reduced-motion:reduce){.dot.run{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <div class="badge">BIO&nbsp;1</div>
+      <div>
+        <h1>Exoskeleton Assistive Control Bench</h1>
+        <p>Elbow EMG rig &middot; interactive simulator for the assistive-control laboratory</p>
+      </div>
+    </div>
+    <div class="status">
+      <span id="statTxt">idle</span>
+      <span id="statDot" class="dot"></span>
+    </div>
+  </header>
+
+  <!-- task rail -->
+  <nav class="tasks" id="taskRail"></nav>
+
+  <div class="grid">
+    <!-- LEFT: stage + controls -->
+    <section class="card">
+      <h2>Bench view <span class="side" id="modeTag">position control</span></h2>
+      <div id="stageWrap">
+        <canvas id="stage" height="360"></canvas>
+        <div class="telem">
+          <div class="chip"><div class="lab">joint &theta;</div><div class="val" id="tTheta">0<small>&deg;</small></div></div>
+          <div class="chip"><div class="lab">servo cmd</div><div class="val" id="tCmd">0<small>&deg;</small></div></div>
+          <div class="chip"><div class="lab">force <span style="color:var(--rose)">F</span></div><div class="val" id="tForce">0<small> cnt</small></div></div>
+          <div class="chip"><div class="lab">EMG</div><div class="val" id="tEmg">0<small> cnt</small></div></div>
+          <div class="chip"><div class="lab">T&nbsp;muscle</div><div class="val" id="tTm">0<small> Nm</small></div></div>
+          <div class="chip"><div class="lab">T&nbsp;exo</div><div class="val" id="tTe">0<small> Nm</small></div></div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="row">
+          <button class="btn primary" id="runBtn">Run</button>
+          <button class="btn" id="resetBtn">Reset</button>
+          <button class="btn hold" id="flexBtn">Hold to flex biceps</button>
+        </div>
+
+        <div class="sub">Human input</div>
+        <div class="field">
+          <div class="lbl"><b>Voluntary effort</b><span class="num" id="effortNum">0%</span></div>
+          <input type="range" id="effort" min="0" max="100" value="0" />
+          <div class="hint">drives real muscle torque and the EMG signal</div>
+        </div>
+        <label class="toggle" id="autoTog"><input type="checkbox" id="auto"/> Auto muscle pattern (scripted flex &rarr; relax)</label>
+        <div class="field">
+          <div class="lbl"><b>Hand load</b><span class="num" id="loadNum">0.0 kg</span></div>
+          <input type="range" id="load" min="0" max="30" value="0" />
+          <div class="hint">extra weight the arm must hold, at the wrist</div>
+        </div>
+        <label class="toggle" id="assistTog"><input type="checkbox" id="assist" checked/> Exoskeleton assist ON</label>
+
+        <div class="divider"></div>
+        <div class="sub" id="paramTitle">Controller parameters</div>
+        <div id="paramBox"></div>
+      </div>
+    </section>
+
+    <!-- RIGHT: scope -->
+    <section class="card">
+      <h2>Instrument traces <span class="side">10&nbsp;s window</span></h2>
+      <div id="scopeWrap"><canvas id="scope" height="560"></canvas></div>
+      <div class="controls" style="padding-top:12px">
+        <div class="legend">
+          <span><i style="background:var(--teal)"></i>joint angle &theta; (&deg;)</span>
+          <span><i style="background:var(--amber)"></i>servo command (&deg;)</span>
+          <span><i style="background:var(--rose)"></i>force forceIs (cnt)</span>
+          <span><i style="background:var(--lime)"></i>EMG (cnt)</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- lower: explanation + code -->
+  <div class="lower">
+    <section class="card"><div class="prose" id="prose"></div></section>
+    <section class="card">
+      <h2>Arduino sketch <span class="side" id="codeTag">Listing 5</span></h2>
+      <pre class="code" id="code"></pre>
+    </section>
+  </div>
+
+  <footer>
+    <span>Model: forearm pendulum + servo-driven exo link, coupled through an interaction stiffness. RK4, dt&nbsp;=&nbsp;5&nbsp;ms.</span>
+    <span>Teaching aid for BIO1 &middot; runs fully client-side</span>
+  </footer>
+</div>
+
+<script>
+"use strict";
+/* =========================================================================
+   BIO1 Exoskeleton Assistive Control Bench
+   Single-file teaching simulator.
+
+   Physical model (elbow, planar)
+   ------------------------------
+   State s = [theta, omega, thetaServo]   (rad, rad/s, rad)
+     theta  : elbow angle, 0 = forearm horizontal (extended), + = flexion
+     omega  : angular velocity
+     thetaServo : angle of the servo-driven exo forearm cuff
+
+   Arm dynamics:
+     J*omega_dot = T_muscle + T_int + T_grav - b*omega
+     T_grav = -(m*g*lc + mLoad*g*L)*cos(theta)          gravity pulls to extend
+     T_int  = kc*(thetaServo - theta) + bc*(omegaServo - omega)   exo <-> arm coupling
+     omegaServo = (thetaCmd - thetaServo)/tau           servo has its own inner loop
+
+   The interaction torque T_int is what the force sensor reports (Fig. 8, 9).
+   The controllers only ever set thetaCmd (a servo position demand), exactly
+   like the lab's myservo.write(positionDesired).
+   ========================================================================= */
+
+const P = {                 // physical constants
+  J: 0.085,                 // forearm+hand inertia about elbow  [kg m^2]
+  m: 1.5,                   // forearm+hand mass                 [kg]
+  lc: 0.17,                 // com distance from elbow           [m]
+  L: 0.34,                  // wrist distance from elbow         [m]
+  g: 9.81,
+  b: 0.10,                  // joint viscous damping
+  kc: 13.0,                 // exo-arm coupling stiffness        [Nm/rad]
+  bc: 0.45,                 // exo-arm coupling damping
+  tau: 0.075,               // servo time constant               [s]
+  MUS_MAX: 5.2,             // muscle torque at full activation  [Nm]
+  R_COUPLE: 0.26,           // moment arm to convert torque->force
+  FORCE_GAIN: 18,           // ADC counts per Newton
+  EMG_GAIN: 660,            // ADC counts at full activation
+  EMG_BASE: 28,
+  THETA_MIN: 0, THETA_MAX: 150,   // physical joint travel [deg]
+};
+
+const dt = 0.005;           // physics step [s]
+
+// ---------- simulation state ----------
+const S = {
+  theta: 0.52, omega: 0, thetaServo: 0.52,   // ~30 deg flexion
+  thetaCmd: 30,             // servo demand [deg]
+  posDes: 40,               // "positionDesired" register for admittance/combined
+  activation: 0,            // 0..1 muscle activation actually applied
+  effort: 0,                // slider 0..1
+  flexing: false,
+  auto: false, autoT: 0,
+  load: 0,                  // kg
+  assist: true,
+  running: false,
+  t: 0,
+  // position-control internals
+  refHigh: false, refTimer: 0,
+  emgActive: true,
+  // outputs (for telem/plot)
+  emgRaw: 0, forceRaw: 0, forceIs: 0, Tint: 0, Tmus: 0,
+};
+
+// ---------- controller parameters (per task) ----------
+const C = {
+  // position
+  posLow: 0, posHigh: 90, dwell: 1.2,
+  // admittance / impedance
+  forceOffset: 439, forceDesired: 0, gain: 0.20,
+  limitRange: false, limMin: 20, limMax: 120,
+  // emg
+  emgLow: 0, emgHigh: 600, mapMax: 150, emgGain: 1.0, threshold: 120,
+  // combined
+  emgForceMax: 600, forceCmdMax: 120,
+  // shared
+  ctrlDelay: 0.02,          // control period [s]  (lab's delay())
+};
+
+/* =======================  DYNAMICS  ======================= */
+function deriv(s, thetaCmd, Tmus, load){
+  const [th, om, ths] = s;
+  const oms = (rad(thetaCmd) - ths)/P.tau;
+  const Tint = P.kc*(ths - th) + P.bc*(oms - om);
+  // theta is elbow FLEXION: 0 = straight/extended (forearm hanging down), + = flexed.
+  // Gravity opposes flexion and is largest with the forearm horizontal (theta = 90 deg).
+  const Tgrav = -(P.m*P.g*P.lc + load*P.g*P.L)*Math.sin(th);
+  const omdot = (Tmus + Tint + Tgrav - P.b*om)/P.J;
+  return [om, omdot, oms];
+}
+function rk4(s, thetaCmd, Tmus, load, h){
+  const k1 = deriv(s, thetaCmd, Tmus, load);
+  const s2 = s.map((v,i)=>v+0.5*h*k1[i]);
+  const k2 = deriv(s2, thetaCmd, Tmus, load);
+  const s3 = s.map((v,i)=>v+0.5*h*k2[i]);
+  const k3 = deriv(s3, thetaCmd, Tmus, load);
+  const s4 = s.map((v,i)=>v+h*k3[i]);
+  const k4 = deriv(s4, thetaCmd, Tmus, load);
+  return s.map((v,i)=>v + (h/6)*(k1[i]+2*k2[i]+2*k3[i]+k4[i]));
+}
+const rad = d=>d*Math.PI/180, deg = r=>r*180/Math.PI;
+const clamp=(x,a,b)=>x<a?a:x>b?b:x;
+const mapLin=(x,a,b,c,d)=>c+(d-c)*(x-a)/(b-a);
+
+/* =======================  CONTROL  =======================
+   Runs once every C.ctrlDelay seconds, mirroring the Arduino loop().    */
+let ctrlAcc = 0;
+function control(){
+  // --- read the "sensors" from current physical state ---
+  const oms = (rad(S.thetaCmd) - S.thetaServo)/P.tau;
+  S.Tint  = P.kc*(S.thetaServo - S.theta) + P.bc*(oms - S.omega);
+  const F = S.Tint / P.R_COUPLE;
+  S.forceRaw = clamp(Math.round(P.FORCE_GAIN*F + C.forceOffset), 0, 1023);
+  S.forceIs  = S.forceRaw - C.forceOffset;
+  const act = S.activation;
+  S.emgRaw = clamp(Math.round(P.EMG_BASE + act*P.EMG_GAIN + (Math.random()*2-1)*38), 0, 1023);
+  S.Tmus   = act*P.MUS_MAX;
+
+  if(!S.assist){                     // assist OFF: servo goes slack, no drive
+    S.thetaCmd = deg(S.thetaServo);
+    S.emgActive = false;
+    return;
+  }
+
+  switch(MODE){
+    case 'position': {
+      S.refTimer += C.ctrlDelay;
+      if(S.refTimer >= C.dwell){ S.refTimer = 0; S.refHigh = !S.refHigh; }
+      S.thetaCmd = S.refHigh ? C.posHigh : C.posLow;
+      break;
+    }
+    case 'admittance': {
+      // positionDesired -= gain*(forceIs - forceDesired);   (Listing 7)
+      S.posDes -= C.gain*(S.forceIs - C.forceDesired);
+      if(C.limitRange) S.posDes = clamp(S.posDes, C.limMin, C.limMax);
+      S.posDes = clamp(S.posDes, P.THETA_MIN, P.THETA_MAX);
+      S.thetaCmd = S.posDes;
+      break;
+    }
+    case 'emg': {
+      // motorPosition = map(emgSignal, 0, 600, 0, 150);      (Listing 9)
+      S.emgActive = (S.emgRaw >= C.threshold);
+      if(S.emgActive){
+        let mp = mapLin(S.emgRaw, C.emgLow, C.emgHigh, 0, C.mapMax)*C.emgGain;
+        S.thetaCmd = clamp(mp, P.THETA_MIN, P.THETA_MAX);
+      } // else: hold last thetaCmd -> motor deactivated below threshold
+      break;
+    }
+    case 'combined': {
+      // EMG -> desired interaction force; admittance closes on it
+      const forceCmd = mapLin(S.emgRaw, 0, C.emgForceMax, 0, C.forceCmdMax);
+      S.emgActive = (S.emgRaw >= C.threshold);
+      const fc = S.emgActive ? forceCmd : 0;
+      S.posDes -= C.gain*(S.forceIs - fc);
+      S.posDes = clamp(S.posDes, P.THETA_MIN, P.THETA_MAX);
+      S.thetaCmd = S.posDes;
+      break;
+    }
+  }
+}
+
+/* =======================  STEP  ======================= */
+function step(realDt){
+  // update human activation
+  let target = S.effort;
+  if(S.flexing) target = 1;
+  if(S.auto){
+    S.autoT += realDt;
+    // scripted pattern: rest, ramp up, hold, release, repeat (~6 s)
+    const p = S.autoT % 6.0;
+    let a = 0;
+    if(p<1) a=0;
+    else if(p<2) a=(p-1);        // ramp
+    else if(p<3.4) a=1;          // hold
+    else if(p<4.2) a=1-(p-3.4)/0.8;
+    else a=0;
+    target = Math.max(target, a);
+  }
+  // muscle activation has its own build-up/relax dynamics (~150 ms)
+  S.activation += (target - S.activation)*Math.min(1, realDt/0.12);
+  S.activation = clamp(S.activation,0,1);
+
+  // integrate physics + run control at its own rate
+  let acc = realDt;
+  while(acc > 1e-9){
+    const h = Math.min(dt, acc);
+    ctrlAcc += h;
+    if(ctrlAcc >= C.ctrlDelay){ ctrlAcc = 0; control(); }
+    const s = rk4([S.theta,S.omega,S.thetaServo], S.thetaCmd, S.Tmus, S.load, h);
+    S.theta = s[0]; S.omega = s[1]; S.thetaServo = s[2];
+    // anatomical elbow end-stops: 0 deg (fully extended) .. 150 deg (fully flexed).
+    // the joint physically cannot pass these, so we stop it and kill velocity into the stop.
+    if(S.theta < rad(P.THETA_MIN)){ S.theta = rad(P.THETA_MIN); if(S.omega<0) S.omega=0; }
+    if(S.theta > rad(P.THETA_MAX)){ S.theta = rad(P.THETA_MAX); if(S.omega>0) S.omega=0; }
+    // keep the servo demand inside the safe range too
+    if(S.thetaServo < rad(P.THETA_MIN)) S.thetaServo = rad(P.THETA_MIN);
+    if(S.thetaServo > rad(P.THETA_MAX)) S.thetaServo = rad(P.THETA_MAX);
+    S.t += h;
+    acc -= h;
+  }
+}
+
+/* =======================  SCOPE  ======================= */
+class Scope{
+  constructor(canvas){
+    this.cv=canvas; this.ctx=canvas.getContext('2d');
+    this.win=10;                       // seconds visible
+    this.tracks=[
+      {key:'theta',  col:getCSS('--teal'), lo:0, hi:150, label:'joint angle', unit:'deg', extra:'cmd'},
+      {key:'cmd',    col:getCSS('--amber'),lo:0, hi:180, label:'servo command / positionDesired', unit:'deg'},
+      {key:'force',  col:getCSS('--rose'), lo:-320, hi:320, label:'interaction force  forceIs', unit:'cnt', zero:true},
+      {key:'emg',    col:getCSS('--lime'), lo:0, hi:1023, label:'EMG raw', unit:'cnt'},
+    ];
+    this.buf=[]; this.maxN=Math.ceil(this.win/0.016)+40;
+  }
+  push(sample){ this.buf.push(sample); if(this.buf.length>this.maxN) this.buf.shift(); }
+  resize(){
+    const dpr=window.devicePixelRatio||1;
+    const w=this.cv.clientWidth;
+    this.cv.width=w*dpr; this.cv.height=this.cv.clientHeight*dpr;
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this.W=w; this.H=this.cv.clientHeight;
+  }
+  draw(now){
+    const ctx=this.ctx, W=this.W, H=this.H;
+    ctx.clearRect(0,0,W,H);
+    const n=this.tracks.length;
+    const padL=54, padR=14, padT=10, padB=8;
+    const gap=10;
+    const th=(H-padT-padB-(n-1)*gap)/n;
+    const t1=now, t0=now-this.win;
+    this.tracks.forEach((tr,i)=>{
+      const y0=padT+i*(th+gap), y1=y0+th;
+      // panel bg
+      ctx.fillStyle='rgba(255,255,255,0.012)';
+      ctx.fillRect(padL,y0,W-padL-padR,th);
+      // grid
+      ctx.strokeStyle='rgba(120,160,155,0.10)'; ctx.lineWidth=1;
+      ctx.beginPath();
+      for(let g=0; g<=4; g++){ const y=y0+th*g/4; ctx.moveTo(padL,y); ctx.lineTo(W-padR,y); }
+      for(let g=0; g<=10; g++){ const x=padL+(W-padL-padR)*g/10; ctx.moveTo(x,y0); ctx.lineTo(x,y1);}
+      ctx.stroke();
+      // zero line
+      if(tr.zero){
+        const yz=mapY(0,tr.lo,tr.hi,y0,y1);
+        ctx.strokeStyle='rgba(200,220,215,0.22)';ctx.setLineDash([4,4]);
+        ctx.beginPath();ctx.moveTo(padL,yz);ctx.lineTo(W-padR,yz);ctx.stroke();ctx.setLineDash([]);
+      }
+      // axis labels
+      ctx.fillStyle=getCSS('--faint'); ctx.font='10px '+getCSS('--mono');
+      ctx.textAlign='right'; ctx.textBaseline='middle';
+      ctx.fillText(fmt(tr.hi), padL-6, y0+6);
+      ctx.fillText(fmt(tr.lo), padL-6, y1-6);
+      ctx.textAlign='left';
+      ctx.fillStyle=tr.col; ctx.font='600 11px '+getCSS('--mono');
+      ctx.fillText(tr.label, padL+8, y0+12);
+
+      const X=x=>mapX(x,t0,t1,padL,W-padR);
+      const Y=v=>mapY(clamp(v,tr.lo,tr.hi),tr.lo,tr.hi,y0,y1);
+
+      // extra trace (command overlay for angle)
+      if(tr.extra){
+        drawLine(ctx,this.buf,'cmd',X,Y,getCSS('--amber'),1.2,0.55,t0);
+      }
+      drawLine(ctx,this.buf,tr.key,X,Y,tr.col,1.8,1,t0);
+
+      // reference / threshold guide lines
+      if(tr.key==='theta' && MODE==='position'){
+        [C.posLow,C.posHigh].forEach(v=>guide(ctx,padL,W-padR,Y(v),getCSS('--faint')));
+      }
+      if(tr.key==='force' && (MODE==='admittance'||MODE==='combined')){
+        guide(ctx,padL,W-padR,Y(C.forceDesired),getCSS('--faint'));
+      }
+      if(tr.key==='emg' && (MODE==='emg'||MODE==='combined')){
+        guide(ctx,padL,W-padR,Y(C.threshold),getCSS('--amber'));
+      }
+      // live value
+      const last=this.buf[this.buf.length-1];
+      if(last){
+        ctx.fillStyle=tr.col;ctx.font='600 13px '+getCSS('--mono');
+        ctx.textAlign='right';
+        ctx.fillText(fmt(last[tr.key])+' '+tr.unit, W-padR-4, y0+12);
+      }
+    });
+  }
+}
+function drawLine(ctx,buf,key,X,Y,col,w,alpha,t0){
+  ctx.strokeStyle=col;ctx.globalAlpha=alpha;ctx.lineWidth=w;
+  ctx.lineJoin='round';ctx.beginPath();let started=false;
+  for(const p of buf){
+    if(p.t<t0-0.1) continue;
+    const x=X(p.t),y=Y(p[key]);
+    if(!started){ctx.moveTo(x,y);started=true;} else ctx.lineTo(x,y);
+  }
+  ctx.stroke();ctx.globalAlpha=1;
+}
+function guide(ctx,x0,x1,y,col){
+  ctx.strokeStyle=col;ctx.globalAlpha=.5;ctx.setLineDash([3,4]);ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(x0,y);ctx.lineTo(x1,y);ctx.stroke();
+  ctx.setLineDash([]);ctx.globalAlpha=1;
+}
+const mapX=(v,a,b,c,d)=>c+(d-c)*(v-a)/(b-a);
+const mapY=(v,a,b,c,d)=>d+(c-d)*(v-a)/(b-a);
+function fmt(v){ return Math.abs(v)>=100?v.toFixed(0):v.toFixed(1); }
+function getCSS(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+/* =======================  STAGE (arm + exo)  ======================= */
+const stage=document.getElementById('stage');
+const sx=stage.getContext('2d');
+// roundRect fallback for older lab browsers (< Chrome 99 / Safari 16)
+if(!CanvasRenderingContext2D.prototype.roundRect){
+  CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+    if(typeof r==='number') r={tl:r,tr:r,br:r,bl:r}; else r=Object.assign({tl:0,tr:0,br:0,bl:0},r);
+    this.beginPath();this.moveTo(x+r.tl,y);
+    this.arcTo(x+w,y,x+w,y+h,r.tr);this.arcTo(x+w,y+h,x,y+h,r.br);
+    this.arcTo(x,y+h,x,y,r.bl);this.arcTo(x,y,x+w,y,r.tl);this.closePath();return this;
+  };
+}
+function resizeStage(){
+  const dpr=window.devicePixelRatio||1;
+  const w=stage.clientWidth, h=stage.clientHeight||360;
+  stage.width=w*dpr; stage.height=h*dpr;
+  sx.setTransform(dpr,0,0,dpr,0,0);
+  stage.SW=w; stage.SH=h;
+}
+function drawStage(){
+  const W=stage.SW,H=stage.SH;
+  sx.clearRect(0,0,W,H);
+  // ground / bench
+  sx.strokeStyle='rgba(120,160,155,.10)';sx.lineWidth=1;
+  for(let gx=0;gx<W;gx+=28){sx.beginPath();sx.moveTo(gx,0);sx.lineTo(gx,H);sx.stroke();}
+  for(let gy=0;gy<H;gy+=28){sx.beginPath();sx.moveTo(0,gy);sx.lineTo(W,gy);sx.stroke();}
+
+  // elbow pivot: sit it high so the extended forearm hangs down with room to spare
+  const ex=W*0.40, ey=H*0.34;
+  const armLen=Math.min(W*0.40,165);
+  const upLen=Math.min(H*0.30,120);
+  // upper arm goes UP from elbow (shoulder above the elbow, arm at the side)
+  const shoulder={x:ex, y:ey-upLen};
+
+  const th=S.theta, ths=S.thetaServo;
+  // Elbow flexion convention: theta = 0 -> forearm straight DOWN (fully extended),
+  // theta = 90 -> forearm horizontal, theta = 150 -> curled up toward the shoulder.
+  // Screen forearm direction (y is down): (sin th, cos th).
+  const wx=ex+armLen*Math.sin(th), wy=ey+armLen*Math.cos(th);
+  // exo cuff follows the servo angle
+  const cx=ex+armLen*Math.sin(ths), cy=ey+armLen*Math.cos(ths);
+
+  // ---- upper arm ----
+  limb(shoulder.x,shoulder.y,ex,ey,26,'#2a3a3d','#38504f');
+  // ---- biceps (activation glow) on the front of the upper arm ----
+  const act=S.activation;
+  const bmx=(shoulder.x+ex)/2 + 14, bmy=(shoulder.y+ey)/2;
+  const bg=sx.createRadialGradient(bmx,bmy,2,bmx,bmy,30);
+  const r=Math.round(120+120*act), g=Math.round(60+40*act);
+  bg.addColorStop(0,`rgba(${r+80},${90+80*act},70,${0.35+0.55*act})`);
+  bg.addColorStop(1,'rgba(255,90,80,0)');
+  sx.fillStyle=bg;sx.beginPath();sx.ellipse(bmx,bmy,20,30,0,0,7);sx.fill();
+
+  // ---- exo link (servo-driven), drawn first so arm sits over it ----
+  sx.globalAlpha=.9;
+  limb(ex,ey,cx,cy,16,'#3a2f12','#5a4718');   // exo forearm cuff (amber-ish)
+  // motor housing at elbow
+  sx.fillStyle='#20343a';sx.strokeStyle='#3f6068';sx.lineWidth=2;
+  sx.beginPath();sx.roundRect(ex-15,ey-15,30,30,6);sx.fill();sx.stroke();
+  sx.fillStyle=getCSS('--amber');sx.font='700 9px '+getCSS('--mono');
+  sx.textAlign='center';sx.fillText('M',ex,ey+3);
+  sx.globalAlpha=1;
+
+  // ---- forearm (the human limb) ----
+  limb(ex,ey,wx,wy,22,'#324447','#3f5c5b');
+  // hand
+  sx.fillStyle='#3f5c5b';sx.beginPath();sx.arc(wx,wy,10,0,7);sx.fill();
+
+  // ---- load in hand ----
+  if(S.load>0){
+    const bs=8+Math.min(22,S.load*0.9);
+    sx.fillStyle='#4a3030';sx.strokeStyle=getCSS('--rose');sx.lineWidth=2;
+    sx.beginPath();sx.roundRect(wx-bs/2, wy+8, bs, bs, 3);sx.fill();sx.stroke();
+    sx.fillStyle=getCSS('--rose');sx.font='9px '+getCSS('--mono');sx.textAlign='center';
+    sx.fillText(S.load.toFixed(0)+'kg', wx, wy+8+bs+11);
+  }
+
+  // ---- joints ----
+  dot(shoulder.x,shoulder.y,6,'#6f8a86');
+  dot(ex,ey,7,getCSS('--teal'));
+  sx.fillStyle=getCSS('--muted');sx.font='10px '+getCSS('--mono');sx.textAlign='left';
+  sx.fillText('shoulder',shoulder.x+10,shoulder.y-6);
+  sx.fillText('elbow',ex+12,ey+20);
+
+  // ---- interaction force arrow at wrist (perpendicular to forearm, along flexion) ----
+  const Fn = S.Tint/P.R_COUPLE;              // N
+  if(Math.abs(Fn)>0.3){
+    // screen tangent of increasing flexion at the wrist
+    const tx=Math.cos(th), ty=-Math.sin(th);
+    const mag=clamp(Fn*3.2,-55,55);
+    const ax=wx+mag*tx, ay=wy+mag*ty;
+    arrow(wx,wy,ax,ay,getCSS('--rose'));
+    sx.fillStyle=getCSS('--rose');sx.font='10px '+getCSS('--mono');sx.textAlign='left';
+    sx.fillText('F_exo', ax+4, ay);
+  }
+
+  // ---- elbow flexion arc (0 deg = straight down) ----
+  const aForearm=Math.atan2(Math.cos(th),Math.sin(th));
+  sx.strokeStyle='rgba(53,224,198,.5)';sx.lineWidth=1.5;
+  sx.beginPath();sx.arc(ex,ey,36,aForearm,Math.PI/2);sx.stroke();
+  const amid=(aForearm+Math.PI/2)/2;
+  sx.fillStyle=getCSS('--teal');sx.font='11px '+getCSS('--mono');sx.textAlign='center';
+  sx.fillText(deg(th).toFixed(0)+'\u00B0', ex+50*Math.cos(amid), ey+50*Math.sin(amid)+4);
+
+  // deactivation banner for EMG threshold
+  if((MODE==='emg'||MODE==='combined') && S.assist && !S.emgActive){
+    sx.fillStyle='rgba(245,178,63,.14)';sx.fillRect(0,0,W,22);
+    sx.fillStyle=getCSS('--amber');sx.font='600 11px '+getCSS('--mono');sx.textAlign='center';
+    sx.fillText('EMG below threshold \u2014 motor deactivated', W/2, 15);
+  }
+  if(!S.assist){
+    sx.fillStyle='rgba(255,82,87,.12)';sx.fillRect(0,0,W,22);
+    sx.fillStyle=getCSS('--red');sx.font='600 11px '+getCSS('--mono');sx.textAlign='center';
+    sx.fillText('assist OFF \u2014 arm unsupported', W/2, 15);
+  }
+}
+function limb(x0,y0,x1,y1,w,fill,stroke){
+  sx.lineCap='round';sx.strokeStyle=stroke;sx.lineWidth=w+3;
+  sx.beginPath();sx.moveTo(x0,y0);sx.lineTo(x1,y1);sx.stroke();
+  sx.strokeStyle=fill;sx.lineWidth=w;
+  sx.beginPath();sx.moveTo(x0,y0);sx.lineTo(x1,y1);sx.stroke();
+}
+function dot(x,y,r,c){sx.fillStyle=c;sx.beginPath();sx.arc(x,y,r,0,7);sx.fill();}
+function arrow(x0,y0,x1,y1,c){
+  sx.strokeStyle=c;sx.fillStyle=c;sx.lineWidth=3;sx.lineCap='round';
+  sx.beginPath();sx.moveTo(x0,y0);sx.lineTo(x1,y1);sx.stroke();
+  const a=Math.atan2(y1-y0,x1-x0);
+  sx.beginPath();sx.moveTo(x1,y1);
+  sx.lineTo(x1-9*Math.cos(a-.4),y1-9*Math.sin(a-.4));
+  sx.lineTo(x1-9*Math.cos(a+.4),y1-9*Math.sin(a+.4));
+  sx.closePath();sx.fill();
+}
+
+/* =======================  TASKS / MODES  ======================= */
+let MODE='position';
+const TASKS=[
+  {id:'position',  k:'TASK III', t:'Position control',  code:'L5'},
+  {id:'admittance',k:'TASK IV',  t:'Admittance control',code:'L7'},
+  {id:'emg',       k:'TASK V',   t:'EMG control',       code:'L9'},
+  {id:'combined',  k:'OPTIONAL', t:'EMG + admittance',  code:'L7+L9'},
+];
+
+const PARAMS={
+  position:[
+    {key:'posLow',  label:'reference low',  min:0,max:60,step:1,unit:'\u00B0',get:()=>C.posLow, set:v=>C.posLow=v},
+    {key:'posHigh', label:'reference high', min:60,max:140,step:1,unit:'\u00B0',get:()=>C.posHigh,set:v=>C.posHigh=v},
+    {key:'dwell',   label:'dwell per point',min:0.4,max:3,step:0.1,unit:'s',get:()=>C.dwell,set:v=>C.dwell=v},
+    {key:'ctrlDelay',label:'control delay',min:0.005,max:0.06,step:0.005,unit:'s',get:()=>C.ctrlDelay,set:v=>C.ctrlDelay=v,mono:true},
+  ],
+  admittance:[
+    {key:'forceOffset',label:'forceOffset',min:380,max:520,step:1,unit:'cnt',get:()=>C.forceOffset,set:v=>C.forceOffset=v},
+    {key:'forceDesired',label:'forceDesired',min:-150,max:150,step:1,unit:'cnt',get:()=>C.forceDesired,set:v=>C.forceDesired=v},
+    {key:'gain',    label:'gain',           min:0.02,max:0.8,step:0.01,unit:'',get:()=>C.gain,set:v=>C.gain=v},
+    {key:'ctrlDelay',label:'control delay', min:0.005,max:0.06,step:0.005,unit:'s',get:()=>C.ctrlDelay,set:v=>C.ctrlDelay=v},
+    {toggle:'limitRange',label:'limit travel range (impedance extension)',get:()=>C.limitRange,set:v=>C.limitRange=v},
+    {key:'limMin',  label:'range min',      min:0,max:70,step:1,unit:'\u00B0',get:()=>C.limMin,set:v=>C.limMin=v,dep:'limitRange'},
+    {key:'limMax',  label:'range max',      min:70,max:150,step:1,unit:'\u00B0',get:()=>C.limMax,set:v=>C.limMax=v,dep:'limitRange'},
+  ],
+  emg:[
+    {key:'mapMax',  label:'map upper (servo\u00B0 at emg=600)',min:40,max:150,step:1,unit:'\u00B0',get:()=>C.mapMax,set:v=>C.mapMax=v},
+    {key:'emgGain', label:'extra gain on motorPosition',min:0.2,max:2.5,step:0.05,unit:'\u00D7',get:()=>C.emgGain,set:v=>C.emgGain=v},
+    {key:'threshold',label:'deactivation threshold',min:0,max:400,step:5,unit:'cnt',get:()=>C.threshold,set:v=>C.threshold=v},
+    {key:'ctrlDelay',label:'control delay',min:0.005,max:0.06,step:0.005,unit:'s',get:()=>C.ctrlDelay,set:v=>C.ctrlDelay=v},
+  ],
+  combined:[
+    {key:'forceCmdMax',label:'force cmd at full EMG',min:20,max:200,step:5,unit:'cnt',get:()=>C.forceCmdMax,set:v=>C.forceCmdMax=v},
+    {key:'gain',    label:'admittance gain',min:0.02,max:0.8,step:0.01,unit:'',get:()=>C.gain,set:v=>C.gain=v},
+    {key:'threshold',label:'EMG threshold', min:0,max:400,step:5,unit:'cnt',get:()=>C.threshold,set:v=>C.threshold=v},
+    {key:'ctrlDelay',label:'control delay', min:0.005,max:0.06,step:0.005,unit:'s',get:()=>C.ctrlDelay,set:v=>C.ctrlDelay=v},
+  ],
+};
+
+const PROSE={
+  position:`<h3>Task III &middot; Position control</h3>
+    <p>The servo has its own inner position loop, so the sketch only sends a demand with <code>myservo.write(positionDesired)</code>. Here the demand toggles between two angles, giving the back-and-forth movement of Listing 5. The measured joint angle (teal) chases the command (amber); the gap between them is the tracking error the inner loop is closing.</p>
+    <p>Add hand load or effort and watch the interaction force build: the exo is doing the work to hold the reference, so the human feels little.</p>
+    <div class="q"><b>&#9670;</b> Draw this as a block diagram: reference &rarr; error &rarr; controller &rarr; servo/plant &rarr; angle sensor &rarr; back to the summing junction. A full movement would replace the two set-points with a stored reference trajectory (e.g. a recorded healthy-limb profile).</div>
+    <div class="q"><b>&#9670;</b> The <b>control delay</b> slider is the loop's sample period. Increase it and the response turns sluggish, then oscillatory: this is the cost of the transport lag mentioned at the end of the task.</div>`,
+  admittance:`<h3>Task IV &middot; Admittance control</h3>
+    <p>An admittance controller reads the interaction force and outputs a position demand, behaving like a virtual spring (Listing 7): <code>positionDesired -= gain*(forceIs - forceDesired)</code>. Push the arm (raise effort or load) and the demand yields, so the device feels compliant rather than stiff.</p>
+    <ul>
+      <li><b>gain</b> sets the compliance: large gain &rarr; very soft and easily back-driven, but prone to overshoot and buzz.</li>
+      <li><b>forceDesired</b> is the force the controller settles at; non-zero values bias the arm up or down.</li>
+      <li><b>forceOffset</b> zeroes the strain-gauge reading, exactly as in the task (default 439).</li>
+    </ul>
+    <div class="q"><b>&#9670;</b> Enable <b>limit travel range</b> to add end-stops: this is the impedance extension asked for, preventing motion beyond a safe band while staying compliant inside it.</div>`,
+  emg:`<h3>Task V &middot; EMG control</h3>
+    <p>The EMG signal becomes the position reference: <code>motorPosition = map(emgSignal, 0, 600, 0, 150)</code> (Listing 9). Flex the biceps (hold the button, raise effort, or use the auto pattern) and the joint follows muscle activity. This anticipates the user's intention instead of reacting to force.</p>
+    <p>Raw EMG is noisy, so the joint jitters. The <b>threshold</b> reproduces the fix from the task: below it the motor is deactivated, removing the twitchy idle behaviour.</p>
+    <div class="q"><b>&#9670;</b> Multiplying <code>motorPosition</code> by a positive gain rescales intention-to-angle: small flexes reach large angles, at the price of amplified noise and easier saturation.</div>`,
+  combined:`<h3>Optional &middot; EMG + admittance</h3>
+    <p>Following the task hint, EMG is mapped to a <em>desired interaction force</em>, and the admittance loop then drives the joint to achieve it: <code>positionDesired -= gain*(forceIs - forceCmd)</code> with <code>forceCmd</code> from the EMG. Muscle activity now sets how hard the exo pushes with the user, rather than a raw target angle.</p>
+    <p>Compare with pure EMG position control: this version rejects external disturbances (the force loop holds the commanded effort even under load) and tends to feel smoother and more cooperative.</p>
+    <div class="q"><b>&#9670;</b> Sketch the two nested paths: EMG &rarr; force command, and force sensor &rarr; admittance &rarr; servo. Discuss which loop dominates as the gain changes.</div>`,
+};
+
+// syntax-highlighted lab listings
+const CODE={
+  position:{tag:'Listing 5',html:hl(
+`#include <Servo.h>
+Servo myservo;
+int positionDesired;
+int counter = 0;
+int reps = 5;
+
+void setup() {
+  Serial.begin(9600);
+  myservo.attach(3);
+}
+
+void loop() {
+  positionDesired = 0;
+  myservo.write(positionDesired);
+  delay(1000);
+  positionDesired = 90;
+  myservo.write(positionDesired);
+  delay(1000);
+  counter++;
+  if (counter == reps) { exit(0); }
+}`)},
+  admittance:{tag:'Listing 7',html:hl(
+`#include <Servo.h>
+Servo myservo;
+int   forceAnalogInPin = A3;
+const int forceOffset  = 439;
+int   forceIs;
+int   forceDesired  = 0;
+int   positionDesired = 40;
+float gain = 0.2;
+
+void setup(){ myservo.attach(3); delay(1000); }
+
+void loop(){
+  forceIs = analogRead(forceAnalogInPin) - forceOffset;
+  delay(10);
+  positionDesired -= gain*(forceIs - forceDesired);
+  myservo.write(positionDesired);
+}`)},
+  emg:{tag:'Listing 9',html:hl(
+`#include <Servo.h>
+Servo myservo;
+int emgAnalogInPin = A0;
+int emgSignal   = 0;
+int motorPosition = 0;
+int threshold   = 120;   // deactivation
+
+void setup(){ myservo.attach(3); }
+
+void loop(){
+  emgSignal = analogRead(emgAnalogInPin);
+  if (emgSignal > threshold) {
+    motorPosition = map(emgSignal, 0, 600, 0, 150);
+    myservo.write(motorPosition);
+  }
+  delay(20);
+}`)},
+  combined:{tag:'Listing 7 + 9',html:hl(
+`#include <Servo.h>
+Servo myservo;
+int emgAnalogInPin  = A0;
+int forceAnalogInPin = A3;
+const int forceOffset = 439;
+int positionDesired = 40;
+float gain = 0.2;
+
+void loop(){
+  int emg   = analogRead(emgAnalogInPin);
+  int fIs   = analogRead(forceAnalogInPin) - forceOffset;
+  int fCmd  = map(emg, 0, 600, 0, 120);   // EMG -> desired force
+  positionDesired -= gain*(fIs - fCmd);
+  myservo.write(positionDesired);
+  delay(20);
+}`)},
+};
+
+function hl(src){
+  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return esc(src)
+    .replace(/(\/\/[^\n]*)/g,'<span class="cm">$1</span>')
+    .replace(/\b(void|int|float|const|if|for|while|return)\b/g,'<span class="kw">$1</span>')
+    .replace(/\b(setup|loop|myservo|Serial|analogRead|map|attach|write|begin|delay|exit|print|println)\b/g,'<span class="fn">$1</span>')
+    .replace(/(#include|&lt;Servo.h&gt;)/g,'<span class="st">$1</span>');
+}
+
+/* =======================  UI WIRING  ======================= */
+const $=id=>document.getElementById(id);
+const scope=new Scope($('scope'));
+
+function buildTasks(){
+  const rail=$('taskRail');rail.innerHTML='';
+  TASKS.forEach(tk=>{
+    const b=document.createElement('button');
+    b.className='task'+(tk.id===MODE?' active':'');
+    b.innerHTML=`<span class="k">${tk.k}</span><span class="t">${tk.t}</span>`;
+    b.onclick=()=>selectMode(tk.id);
+    rail.appendChild(b);
+  });
+}
+function selectMode(id){
+  MODE=id;
+  S.posDes=40; S.refTimer=0; S.refHigh=false;
+  buildTasks();
+  buildParams();
+  $('prose').innerHTML=PROSE[id];
+  $('code').innerHTML=CODE[id].html;
+  $('codeTag').textContent=CODE[id].tag;
+  $('modeTag').textContent=TASKS.find(t=>t.id===id).t.toLowerCase();
+}
+function buildParams(){
+  const box=$('paramBox');box.innerHTML='';
+  PARAMS[MODE].forEach(p=>{
+    if(p.toggle){
+      const l=document.createElement('label');
+      l.className='toggle'+(p.get()?' on':'');
+      l.innerHTML=`<input type="checkbox" ${p.get()?'checked':''}/> ${p.label}`;
+      l.querySelector('input').onchange=e=>{p.set(e.target.checked);buildParams();};
+      box.appendChild(l);
+      return;
+    }
+    const wrap=document.createElement('div');wrap.className='field';
+    const dep = p.dep ? !PARAMS[MODE].find(q=>q.toggle===p.dep).get() : false;
+    const val=p.get();
+    const show = p.step<1 ? val.toFixed(p.step<0.05?2:2) : val.toFixed(0);
+    wrap.innerHTML=`<div class="lbl"><b>${p.label}</b><span class="num">${show}${p.unit}</span></div>`;
+    const inp=document.createElement('input');
+    inp.type='range';inp.min=p.min;inp.max=p.max;inp.step=p.step;inp.value=val;inp.disabled=dep;
+    inp.oninput=e=>{
+      const v=parseFloat(e.target.value);p.set(v);
+      wrap.querySelector('.num').textContent=(p.step<1?v.toFixed(2):v.toFixed(0))+p.unit;
+    };
+    wrap.appendChild(inp);
+    box.appendChild(wrap);
+  });
+}
+
+// run / reset
+function setRun(on){
+  S.running=on;
+  $('runBtn').textContent=on?'Pause':'Run';
+  $('runBtn').classList.toggle('primary',!on);
+  $('statTxt').textContent=on?'running':'paused';
+  $('statDot').classList.toggle('run',on);
+}
+$('runBtn').onclick=()=>setRun(!S.running);
+$('resetBtn').onclick=()=>{
+  S.theta=0.52;S.omega=0;S.thetaServo=0.52;S.thetaCmd=30;S.posDes=40;
+  S.activation=0;S.t=0;S.refTimer=0;S.refHigh=false;scope.buf=[];
+};
+
+// human inputs
+$('effort').oninput=e=>{S.effort=e.target.value/100;$('effortNum').textContent=e.target.value+'%';};
+$('load').oninput=e=>{S.load=e.target.value/10;$('loadNum').textContent=S.load.toFixed(1)+' kg';};
+$('auto').onchange=e=>{S.auto=e.target.checked;$('autoTog').classList.toggle('on',e.target.checked);S.autoT=0;};
+$('assist').onchange=e=>{S.assist=e.target.checked;$('assistTog').classList.toggle('on',e.target.checked);};
+$('assistTog').classList.add('on');
+
+const flex=$('flexBtn');
+const flexOn=v=>{S.flexing=v;flex.classList.toggle('on',v);};
+flex.addEventListener('pointerdown',e=>{e.preventDefault();flexOn(true);});
+flex.addEventListener('pointerup',()=>flexOn(false));
+flex.addEventListener('pointerleave',()=>flexOn(false));
+flex.addEventListener('pointercancel',()=>flexOn(false));
+window.addEventListener('keydown',e=>{if(e.code==='Space'&&!e.repeat){e.preventDefault();flexOn(true);}});
+window.addEventListener('keyup',e=>{if(e.code==='Space'){flexOn(false);}});
+
+// telemetry
+function telem(){
+  $('tTheta').innerHTML=deg(S.theta).toFixed(0)+'<small>&deg;</small>';
+  $('tCmd').innerHTML=S.thetaCmd.toFixed(0)+'<small>&deg;</small>';
+  $('tForce').innerHTML=S.forceIs.toFixed(0)+'<small> cnt</small>';
+  $('tEmg').innerHTML=S.emgRaw.toFixed(0)+'<small> cnt</small>';
+  $('tTm').innerHTML=S.Tmus.toFixed(1)+'<small> Nm</small>';
+  $('tTe').innerHTML=S.Tint.toFixed(1)+'<small> Nm</small>';
+}
+
+/* =======================  MAIN LOOP  ======================= */
+let last=performance.now();
+function frame(now){
+  let rdt=(now-last)/1000; last=now;
+  rdt=Math.min(rdt,0.05);            // avoid huge jumps on tab switch
+  if(S.running){
+    step(rdt);
+    scope.push({t:S.t,theta:deg(S.theta),cmd:S.thetaCmd,force:S.forceIs,emg:S.emgRaw});
+  }
+  drawStage();
+  scope.draw(S.t);
+  telem();
+  requestAnimationFrame(frame);
+}
+
+function resizeAll(){resizeStage();scope.resize();}
+window.addEventListener('resize',resizeAll);
+
+// init
+buildTasks();buildParams();
+$('prose').innerHTML=PROSE.position;
+$('code').innerHTML=CODE.position.html;
+$('codeTag').textContent=CODE.position.tag;
+resizeAll();
+setRun(true);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
