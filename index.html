@@ -802,9 +802,9 @@ function arrow(x0,y0,x1,y1,c){
 /* =======================  TASKS / MODES  ======================= */
 let MODE='position';
 const TASKS=[
-  {id:'position',  k:'TASK III', t:'Position control',  code:'L5'},
-  {id:'admittance',k:'TASK IV',  t:'Admittance control',code:'L7'},
-  {id:'emg',       k:'TASK V',   t:'EMG control',       code:'L9'},
+  {id:'position',  k:'Task I', t:'Position control',  code:'L5'},
+  {id:'admittance',k:'Task II',  t:'Admittance control',code:'L7'},
+  {id:'emg',       k:'Task III',   t:'EMG control',       code:'L9'},
   {id:'combined',  k:'OPTIONAL', t:'EMG + admittance',  code:'L7+L9'},
 ];
 
@@ -839,12 +839,12 @@ const PARAMS={
 };
 
 const PROSE={
-  position:`<h3>Task III &middot; Position control</h3>
+  position:`<h3>Task I &middot; Position control</h3>
     <p>The servo has its own inner position loop, so the sketch only sends a demand with <code>myservo.write(positionDesired)</code>. Here the demand toggles between two angles, giving the back-and-forth movement of Listing 5. The measured joint angle (teal) chases the command (amber); the gap between them is the tracking error the inner loop is closing.</p>
     <p>Add hand load or effort and watch the interaction force build: the exo is doing the work to hold the reference, so the human feels little.</p>
     <div class="q"><b>&#9670;</b> Draw this as a block diagram: reference &rarr; error &rarr; controller &rarr; servo/plant &rarr; angle sensor &rarr; back to the summing junction. A full movement would replace the two set-points with a stored reference trajectory (e.g. a recorded healthy-limb profile).</div>
     <div class="q"><b>&#9670;</b> The <b>control delay</b> slider is the loop's sample period. Increase it and the response turns sluggish, then oscillatory: this is the cost of the transport lag mentioned at the end of the task.</div>`,
-  admittance:`<h3>Task IV &middot; Admittance control</h3>
+  admittance:`<h3>Task II &middot; Admittance control</h3>
     <p>An admittance controller reads the interaction force and outputs a position demand, behaving like a virtual spring (Listing 7): <code>positionDesired -= gain*(forceIs - forceDesired)</code>. Push the arm (raise effort or load) and the demand yields, so the device feels compliant rather than stiff.</p>
     <ul>
       <li><b>gain</b> sets the compliance: large gain &rarr; very soft and easily back-driven, but prone to overshoot and buzz.</li>
@@ -852,7 +852,7 @@ const PROSE={
       <li><b>forceOffset</b> zeroes the strain-gauge reading, exactly as in the task (default 439).</li>
     </ul>
     <div class="q"><b>&#9670;</b> Enable <b>limit travel range</b> to add end-stops: this is the impedance extension asked for, preventing motion beyond a safe band while staying compliant inside it.</div>`,
-  emg:`<h3>Task V &middot; EMG control</h3>
+  emg:`<h3>Task III &middot; EMG control</h3>
     <p>The EMG signal becomes the position reference: <code>motorPosition = map(emgSignal, 0, 600, 0, 150)</code> (Listing 9). Flex the biceps (hold the button, raise effort, or use the auto pattern) and the joint follows muscle activity. This anticipates the user's intention instead of reacting to force.</p>
     <p>Raw EMG is noisy, so the joint jitters. The <b>threshold</b> reproduces the fix from the task: below it the motor is deactivated, removing the twitchy idle behaviour.</p>
     <p><b>Attentional focus.</b> Switch between <em>external</em>, <em>control</em> and <em>internal</em> focus and watch the EMG-activity meter while flexing the same amount. Attending to the muscle (internal) raises the signal; attending to the load (external) lowers it, the constrained-action effect where external focus frees more automatic control and spends less muscle activity. The physical effort and torque are identical; only the electrical signal the exoskeleton reads changes.</p>
