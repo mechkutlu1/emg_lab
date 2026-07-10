@@ -32,24 +32,5 @@ omegaServo = (thetaCmd - thetaServo)/tau                     # servo inner loop
 
 Controllers only ever set `thetaCmd`, exactly like `myservo.write(positionDesired)`. The interaction torque `T_int` is what the force sensor reports; EMG is generated from muscle activation plus noise. Parameters live at the top of the `<script>` block (`P`, `C`) and are easy to retune for a class.
 
-## Deploy to GitHub Pages
-
-1. Create a repository, e.g. `exoskeleton-control-bench`.
-2. Add `index.html` (and this `README.md`) to the repository root and push:
-   ```bash
-   git init
-   git add index.html README.md
-   git commit -m "BIO1 exoskeleton assistive control bench"
-   git branch -M main
-   git remote add origin https://github.com/<you>/exoskeleton-control-bench.git
-   git push -u origin main
-   ```
-3. On GitHub: **Settings &rarr; Pages &rarr; Build and deployment**, set **Source = Deploy from a branch**, **Branch = main**, folder **/ (root)**, then Save.
-4. The site appears at `https://<you>.github.io/exoskeleton-control-bench/` within a minute or two.
-
-To try it locally, just open `index.html` in a browser, or run `python3 -m http.server` in the folder and visit `http://localhost:8000`.
-
-## Notes
-
 - Works on desktop and mobile; keyboard focus and reduced-motion preferences are respected.
 - The physics constants are illustrative, chosen so the control effects are clearly visible rather than to reproduce a specific rig.
