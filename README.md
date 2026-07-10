@@ -8,16 +8,16 @@ Everything runs client-side in a single `index.html`. No build step, no server, 
 
 Each task maps to a tab and shows the matching Arduino listing alongside the physics:
 
-- **Task III &mdash; Position control** (Listing 5): the servo's inner loop tracks a demanded angle; students see tracking error and the effect of loop delay.
-- **Task IV &mdash; Admittance control** (Listing 7): `positionDesired -= gain*(forceIs - forceDesired)`. The device becomes a virtual spring; students vary `gain`, `forceDesired` and `forceOffset`, and switch on travel limits (the impedance extension).
-- **Task V &mdash; EMG control** (Listing 9): `motorPosition = map(emgSignal, 0, 600, 0, 150)`. Muscle activity drives the joint; a threshold deactivates the motor to remove jitter.
+- **Task I &mdash; Position control** (Listing 5): the servo's inner loop tracks a demanded angle; students see tracking error and the effect of loop delay.
+- **Task II &mdash; Admittance control** (Listing 7): `positionDesired -= gain*(forceIs - forceDesired)`. The device becomes a virtual spring; students vary `gain`, `forceDesired` and `forceOffset`, and switch on travel limits (the impedance extension).
+- **Task III &mdash; EMG control** (Listing 9): `motorPosition = map(emgSignal, 0, 600, 0, 150)`. Muscle activity drives the joint; a threshold deactivates the motor to remove jitter.
 - **Optional &mdash; EMG + admittance**: EMG is mapped to a desired interaction force which the admittance loop then delivers.
 
 Inputs students can manipulate: voluntary effort (or hold-to-flex / spacebar), an auto flex pattern, hand load, a master **assist ON/OFF** to demonstrate the need for assistance, and an **attentional-focus** selector (external / control / internal).
 
 ### Attentional focus
 
-Based on Ay's 2021 PhD (Sakarya University of Applied Sciences), the focus condition scales the EMG the muscle emits for the *same* movement: internal focus (attend to the muscle) raises EMG activity, external focus (attend to the load) lowers it, per the constrained-action hypothesis. The physical effort and joint torque are unchanged, only the electrical signal the exoskeleton reads. A live EMG-activity (RMS) meter shows the effect. In the EMG and combined modes this inverts the usual coaching advice: internal focus gives a stronger, higher-SNR command that clears the deactivation threshold reliably, so it is the better myoelectric control input, while external focus can leave the signal too weak to drive the motor. The tabs also note that focus type is itself decodable from the EMG, so it can act as an extra input channel.
+The focus condition scales the EMG the muscle emits for the *same* movement: internal focus (attend to the muscle) raises EMG activity, external focus (attend to the load) lowers it, per the constrained-action hypothesis. The physical effort and joint torque are unchanged, only the electrical signal the exoskeleton reads. A live EMG-activity (RMS) meter shows the effect. In the EMG and combined modes this inverts the usual coaching advice: internal focus gives a stronger, higher-SNR command that clears the deactivation threshold reliably, so it is the better myoelectric control input, while external focus can leave the signal too weak to drive the motor.
 
 ## The model
 
