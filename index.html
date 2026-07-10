@@ -165,6 +165,25 @@
   .toggle input{accent-color:var(--teal);width:16px;height:16px}
   .toggle.on{color:var(--ink)}
 
+  /* attentional focus segmented control */
+  .seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}
+  .segbtn{
+    appearance:none;cursor:pointer;font-family:var(--mono);font-size:12.5px;font-weight:600;
+    padding:9px 6px;border-radius:8px;border:1px solid var(--line2);
+    background:var(--panel2);color:var(--muted);transition:.15s;
+  }
+  .segbtn:hover{color:var(--ink);border-color:var(--line2)}
+  .segbtn.active{background:var(--lime);color:#10230a;border-color:var(--lime);box-shadow:0 0 16px rgba(166,232,106,.3)}
+  .meter{margin-bottom:6px}
+  .meter-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+  .meter-lab{font-size:12.5px;color:var(--muted)}
+  .meter-val{font-family:var(--mono);font-size:13px;color:var(--lime)}
+  .meter-val small{color:var(--faint)}
+  .meter-bar{position:relative;height:8px;border-radius:5px;background:var(--bg2);border:1px solid var(--line);overflow:hidden}
+  .meter-fill{position:absolute;left:0;top:0;bottom:0;width:0%;
+    background:linear-gradient(90deg,#5a8a3a,var(--lime));transition:width .08s linear}
+  .meter-tick{position:absolute;top:-2px;bottom:-2px;width:1px;background:var(--faint);opacity:.6}
+
   .divider{height:1px;background:var(--line);margin:6px 0 14px}
   .sub{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:2px 0 10px}
 
@@ -264,6 +283,26 @@
         <label class="toggle" id="assistTog"><input type="checkbox" id="assist" checked/> Exoskeleton assist ON</label>
 
         <div class="divider"></div>
+        <div class="sub">Attentional focus <span style="color:var(--faint)">(same movement, different EMG)</span></div>
+        <div class="seg" id="focusSeg">
+          <button class="segbtn" data-focus="external">External</button>
+          <button class="segbtn active" data-focus="control">Control</button>
+          <button class="segbtn" data-focus="internal">Internal</button>
+        </div>
+        <div class="hint" id="focusHint" style="margin:-4px 0 12px">no instruction given &middot; baseline EMG</div>
+        <div class="meter">
+          <div class="meter-row">
+            <span class="meter-lab">EMG activity (RMS)</span>
+            <span class="meter-val" id="rmsVal">0 <small>cnt</small></span>
+          </div>
+          <div class="meter-bar"><div class="meter-fill" id="rmsFill"></div>
+            <div class="meter-tick" style="left:38%"></div>
+            <div class="meter-tick" style="left:55%"></div>
+          </div>
+          <div class="hint" id="rmsQual">flex to see the signal the exoskeleton reads</div>
+        </div>
+
+        <div class="divider"></div>
         <div class="sub" id="paramTitle">Controller parameters</div>
         <div id="paramBox"></div>
       </div>
@@ -341,6 +380,17 @@ const P = {                 // physical constants
   THETA_MIN: 0, THETA_MAX: 150,   // physical joint travel [deg]
 };
 
+// Attentional focus modulates how much EMG the muscle emits for the SAME movement
+// (Ay 2021, PhD, Sakarya: internal focus raises EMG activity, external focus lowers it
+// via the constrained-action hypothesis). Physical effort/torque is unchanged; only the
+// electrical signal the exoskeleton reads changes. Factors are set so internal sits a
+// little above control and external ~15-20% below, matching the thesis RMS/MAV/IEMG.
+const FOCUS = {
+  external: { gain: 0.82, name: 'External', hint: 'attend to the load / the effect' },
+  control:  { gain: 1.00, name: 'Control',  hint: 'no instruction given' },
+  internal: { gain: 1.17, name: 'Internal', hint: 'attend to the biceps itself' },
+};
+
 const dt = 0.005;           // physics step [s]
 
 // ---------- simulation state ----------
@@ -354,6 +404,8 @@ const S = {
   auto: false, autoT: 0,
   load: 0,                  // kg
   assist: true,
+  focus: 'control',         // attentional focus condition
+  emgRms: 0,                // rolling RMS of EMG activity (thesis metric)
   running: false,
   t: 0,
   // position-control internals
@@ -414,8 +466,13 @@ function control(){
   S.forceRaw = clamp(Math.round(P.FORCE_GAIN*F + C.forceOffset), 0, 1023);
   S.forceIs  = S.forceRaw - C.forceOffset;
   const act = S.activation;
-  S.emgRaw = clamp(Math.round(P.EMG_BASE + act*P.EMG_GAIN + (Math.random()*2-1)*38), 0, 1023);
-  S.Tmus   = act*P.MUS_MAX;
+  // Attentional focus scales the EMG the muscle emits for the SAME contraction.
+  const fg = FOCUS[S.focus].gain;
+  S.emgRaw = clamp(Math.round(P.EMG_BASE + act*P.EMG_GAIN*fg + (Math.random()*2-1)*38), 0, 1023);
+  // rolling RMS of activity above the resting baseline (the thesis's RMS/IEMG metric)
+  const emgAC = Math.max(0, S.emgRaw - P.EMG_BASE);
+  S.emgRms += (emgAC - S.emgRms)*0.10;
+  S.Tmus   = act*P.MUS_MAX;   // physical effort is independent of focus
 
   if(!S.assist){                     // assist OFF: servo goes slack, no drive
     S.thetaCmd = deg(S.thetaServo);
@@ -572,8 +629,12 @@ class Scope{
       if(tr.key==='force' && (MODE==='admittance'||MODE==='combined')){
         guide(ctx,padL,W-padR,Y(C.forceDesired),getCSS('--faint'));
       }
-      if(tr.key==='emg' && (MODE==='emg'||MODE==='combined')){
-        guide(ctx,padL,W-padR,Y(C.threshold),getCSS('--amber'));
+      if(tr.key==='emg'){
+        if(MODE==='emg'||MODE==='combined')
+          guide(ctx,padL,W-padR,Y(C.threshold),getCSS('--amber'));
+        // current attentional-focus condition tag
+        ctx.fillStyle=getCSS('--lime');ctx.font='600 10px '+getCSS('--mono');ctx.textAlign='right';
+        ctx.fillText(FOCUS[S.focus].name.toLowerCase()+' focus', W-padR-4, y1-6);
       }
       // live value
       const last=this.buf[this.buf.length-1];
@@ -741,9 +802,9 @@ function arrow(x0,y0,x1,y1,c){
 /* =======================  TASKS / MODES  ======================= */
 let MODE='position';
 const TASKS=[
-  {id:'position',  k:'Task I', t:'Position control',  code:'L5'},
-  {id:'admittance',k:'Task II',  t:'Admittance control',code:'L7'},
-  {id:'emg',       k:'Task III',   t:'EMG control',       code:'L9'},
+  {id:'position',  k:'TASK III', t:'Position control',  code:'L5'},
+  {id:'admittance',k:'TASK IV',  t:'Admittance control',code:'L7'},
+  {id:'emg',       k:'TASK V',   t:'EMG control',       code:'L9'},
   {id:'combined',  k:'OPTIONAL', t:'EMG + admittance',  code:'L7+L9'},
 ];
 
@@ -778,12 +839,12 @@ const PARAMS={
 };
 
 const PROSE={
-  position:`<h3>Task I &middot; Position control</h3>
+  position:`<h3>Task III &middot; Position control</h3>
     <p>The servo has its own inner position loop, so the sketch only sends a demand with <code>myservo.write(positionDesired)</code>. Here the demand toggles between two angles, giving the back-and-forth movement of Listing 5. The measured joint angle (teal) chases the command (amber); the gap between them is the tracking error the inner loop is closing.</p>
     <p>Add hand load or effort and watch the interaction force build: the exo is doing the work to hold the reference, so the human feels little.</p>
     <div class="q"><b>&#9670;</b> Draw this as a block diagram: reference &rarr; error &rarr; controller &rarr; servo/plant &rarr; angle sensor &rarr; back to the summing junction. A full movement would replace the two set-points with a stored reference trajectory (e.g. a recorded healthy-limb profile).</div>
     <div class="q"><b>&#9670;</b> The <b>control delay</b> slider is the loop's sample period. Increase it and the response turns sluggish, then oscillatory: this is the cost of the transport lag mentioned at the end of the task.</div>`,
-  admittance:`<h3>Task II &middot; Admittance control</h3>
+  admittance:`<h3>Task IV &middot; Admittance control</h3>
     <p>An admittance controller reads the interaction force and outputs a position demand, behaving like a virtual spring (Listing 7): <code>positionDesired -= gain*(forceIs - forceDesired)</code>. Push the arm (raise effort or load) and the demand yields, so the device feels compliant rather than stiff.</p>
     <ul>
       <li><b>gain</b> sets the compliance: large gain &rarr; very soft and easily back-driven, but prone to overshoot and buzz.</li>
@@ -791,14 +852,16 @@ const PROSE={
       <li><b>forceOffset</b> zeroes the strain-gauge reading, exactly as in the task (default 439).</li>
     </ul>
     <div class="q"><b>&#9670;</b> Enable <b>limit travel range</b> to add end-stops: this is the impedance extension asked for, preventing motion beyond a safe band while staying compliant inside it.</div>`,
-  emg:`<h3>Task III &middot; EMG control</h3>
+  emg:`<h3>Task V &middot; EMG control</h3>
     <p>The EMG signal becomes the position reference: <code>motorPosition = map(emgSignal, 0, 600, 0, 150)</code> (Listing 9). Flex the biceps (hold the button, raise effort, or use the auto pattern) and the joint follows muscle activity. This anticipates the user's intention instead of reacting to force.</p>
     <p>Raw EMG is noisy, so the joint jitters. The <b>threshold</b> reproduces the fix from the task: below it the motor is deactivated, removing the twitchy idle behaviour.</p>
-    <div class="q"><b>&#9670;</b> Multiplying <code>motorPosition</code> by a positive gain rescales intention-to-angle: small flexes reach large angles, at the price of amplified noise and easier saturation.</div>`,
+    <p><b>Attentional focus.</b> Switch between <em>external</em>, <em>control</em> and <em>internal</em> focus and watch the EMG-activity meter while flexing the same amount. Attending to the muscle (internal) raises the signal; attending to the load (external) lowers it, the constrained-action effect where external focus frees more automatic control and spends less muscle activity. The physical effort and torque are identical; only the electrical signal the exoskeleton reads changes.</p>
+    <div class="q"><b>&#9670;</b> For a myoelectric device this inverts the usual advice: internal focus gives a stronger, higher-SNR command that clears the threshold reliably, so it is the <em>better</em> control input, while external focus can leave the signal too weak to drive the motor. Try each focus at a fixed effort and compare.</div>`,
   combined:`<h3>Optional &middot; EMG + admittance</h3>
     <p>Following the task hint, EMG is mapped to a <em>desired interaction force</em>, and the admittance loop then drives the joint to achieve it: <code>positionDesired -= gain*(forceIs - forceCmd)</code> with <code>forceCmd</code> from the EMG. Muscle activity now sets how hard the exo pushes with the user, rather than a raw target angle.</p>
     <p>Compare with pure EMG position control: this version rejects external disturbances (the force loop holds the commanded effort even under load) and tends to feel smoother and more cooperative.</p>
-    <div class="q"><b>&#9670;</b> Sketch the two nested paths: EMG &rarr; force command, and force sensor &rarr; admittance &rarr; servo. Discuss which loop dominates as the gain changes.</div>`,
+    <p><b>Attentional focus as an input.</b> The focus condition still scales the EMG, so internal focus commands a larger assistive force for the same movement. Because the focus type can itself be decoded from the EMG (classifiers reach ~88% with hand-crafted features and ~99% with wavelet features), it can act as a second, deliberate input channel, effectively doubling the commands available to the interface.</p>
+    <div class="q"><b>&#9670;</b> Sketch the two nested paths: EMG &rarr; force command, and force sensor &rarr; admittance &rarr; servo. Then add a third path: a focus classifier on the same EMG producing a discrete mode command. Discuss which loop dominates as the gain changes.</div>`,
 };
 
 // syntax-highlighted lab listings
@@ -951,7 +1014,7 @@ function setRun(on){
 $('runBtn').onclick=()=>setRun(!S.running);
 $('resetBtn').onclick=()=>{
   S.theta=0.52;S.omega=0;S.thetaServo=0.52;S.thetaCmd=30;S.posDes=40;
-  S.activation=0;S.t=0;S.refTimer=0;S.refHigh=false;scope.buf=[];
+  S.activation=0;S.t=0;S.refTimer=0;S.refHigh=false;S.emgRms=0;scope.buf=[];
 };
 
 // human inputs
@@ -960,6 +1023,17 @@ $('load').oninput=e=>{S.load=e.target.value/10;$('loadNum').textContent=S.load.t
 $('auto').onchange=e=>{S.auto=e.target.checked;$('autoTog').classList.toggle('on',e.target.checked);S.autoT=0;};
 $('assist').onchange=e=>{S.assist=e.target.checked;$('assistTog').classList.toggle('on',e.target.checked);};
 $('assistTog').classList.add('on');
+
+// attentional focus
+document.querySelectorAll('#focusSeg .segbtn').forEach(b=>{
+  b.onclick=()=>{
+    S.focus=b.dataset.focus;
+    document.querySelectorAll('#focusSeg .segbtn').forEach(x=>x.classList.toggle('active',x===b));
+    $('focusHint').textContent=FOCUS[S.focus].hint+' \u00B7 '+
+      (S.focus==='internal'?'higher EMG, stronger control signal':
+       S.focus==='external'?'lower EMG, more efficient but weaker signal':'baseline EMG');
+  };
+});
 
 const flex=$('flexBtn');
 const flexOn=v=>{S.flexing=v;flex.classList.toggle('on',v);};
@@ -978,6 +1052,14 @@ function telem(){
   $('tEmg').innerHTML=S.emgRaw.toFixed(0)+'<small> cnt</small>';
   $('tTm').innerHTML=S.Tmus.toFixed(1)+'<small> Nm</small>';
   $('tTe').innerHTML=S.Tint.toFixed(1)+'<small> Nm</small>';
+  // EMG activity meter (RMS above baseline). Ticks ~ external/internal typical bands.
+  const rms=S.emgRms;
+  $('rmsVal').innerHTML=rms.toFixed(0)+' <small>cnt</small>';
+  $('rmsFill').style.width=clamp(rms/700*100,0,100).toFixed(0)+'%';
+  const q = rms<80 ? 'weak \u2013 may fall below threshold'
+          : rms<300 ? 'moderate signal'
+          : 'strong \u2013 reliable EMG control';
+  $('rmsQual').textContent=q;
 }
 
 /* =======================  MAIN LOOP  ======================= */
